@@ -1,6 +1,17 @@
 # Aversion: '3.8'
 
 services:
+  app-new-payment:
+    build:
+      context: new_payment
+    container_name: app-new-payment
+    ports:
+      - "8001:8001"
+    networks:
+      - postgres_network
+      - queue_network
+    restart: unless-stopped
+
   # Primary PostgreSQL Database
   postgres-primary:
     image: postgres:16-alpine
