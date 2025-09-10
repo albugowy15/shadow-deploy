@@ -1,0 +1,155 @@
+# Aversion: '3.8'
+
+services:
+  # Primary PostgreSQL Database
+  postgres-primary:
+    image: postgres:16-alpine
+    container_name: postgres_primary
+    environment:
+      POSTGRES_DB: primary_db
+      POSTGRES_USER: primary_user
+      POSTGRES_PASSWORD: primary_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./init-scripts/primary:/docker-entrypoint-initdb.d/
+    networks:
+      - postgres_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U primary_user -d primary_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Secondary PostgreSQL Database (e.g., for analytics, reporting)
+  postgres-secondary:
+    image: postgres:16-alpine
+    container_name: postgres_secondary
+    environment:
+      POSTGRES_DB: secondary_db
+      POSTGRES_USER: secondary_user
+      POSTGRES_PASSWORD: secondary_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_secondary_data:/var/lib/postgresql/data
+      - ./init-scripts/secondary:/docker-entrypoint-initdb.d/
+    networks:
+      - postgres_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U secondary_user -d secondary_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    container_name: zookeeper
+    restart: unless-stopped
+    ports:
+      - "2181:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    volumes:
+      - zookeeper_data:/bitnami/zookeeper
+    networks:
+      - queue_network
+    healthcheck:
+      test: ["CMD", "zkServer.sh", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092" # external connections
+      - "29092:29092" # internal containers can use this
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT_INTERNAL
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    volumes:
+      - kafka_data:/bitnami/kafka
+    networks:
+      - queue_network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "kafka-topics.sh",
+          "--bootstrap-server=localhost:9092",
+          "--list",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672" # RabbitMQ messaging
+      - "15672:15672" # RabbitMQ management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - queue_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    container_name: kafdrop
+    restart: unless-stopped
+    ports:
+      - "9000:9000" # Kafdrop UI
+    environment:
+      - KAFKA_BROKERCONNECT=kafka:29092
+      - JVM_OPTS=-Xms32M -Xmx64M
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - queue_network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_primary_data:
+    driver: local
+  postgres_secondary_data:
+    driver: local
+  kafka_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+networks:
+  postgres_network:
+  queue_network:
