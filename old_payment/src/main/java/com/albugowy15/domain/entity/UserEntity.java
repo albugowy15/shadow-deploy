@@ -1,8 +1,7 @@
-package com.albugowy15.entities;
+package com.albugowy15.domain.entity;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
-
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

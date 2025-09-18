@@ -12,6 +12,20 @@ services:
       - queue_network
     restart: unless-stopped
 
+  app-old-payment:
+    build:
+      context: ./old_payment
+      dockerfile: src/main/docker/Dockerfile.native-micro
+    container_name: app-old-payment
+    ports:
+      - "8080:8080"
+    networks:
+      - postgres_network
+      - queue_network
+    restart: unless-stopped
+    depends_on:
+      - postgres-primary
+
   # Primary PostgreSQL Database
   postgres-primary:
     image: postgres:16-alpine

@@ -44,5 +44,4 @@ nb-configuration.xml
 # TLS Certificates
 .certs/
 
-*.properties
 application.properties
